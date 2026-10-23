@@ -1,0 +1,50 @@
+# Runs the Playwright tests on GitHub's machines and attaches the Allure report to each run.
+# Open a run under the Actions tab and download "allure-report" at the bottom, then open index.html.
+name: Playwright tests
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:   # adds a "Run workflow" button in the Actions tab
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+
+    # Same values as .env. The URLs are not secret; the rest are saved in the repo under
+    # Settings > Secrets and variables > Actions (tests that need them are skipped while they are empty).
+    env:
+      DOC_HOME_URL: https://www.doconcall.com.my/
+      DOC_LOGIN_URL: https://auth.dev.doctoroncall.com.my/?redirectUri=https%3A%2F%2Fwww.doconcall.com.my%2Fmy-account%2F
+      DOC_MY_ACCOUNT_URL: https://www.doconcall.com.my/my-account/
+      DOC_EMAIL: ${{ secrets.DOC_EMAIL }}
+      DOC_PASSWORD: ${{ secrets.DOC_PASSWORD }}
+      DOC_COUPON_CODE: ${{ secrets.DOC_COUPON_CODE }}
+      DOC_COUPON_AMOUNT: ${{ secrets.DOC_COUPON_AMOUNT }}
+
+    steps:
+      # Step 1: get the code
+      - uses: actions/checkout@v4
+
+      # Step 2: install Python, the packages and the Chromium browser
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+      - run: pip install -r requirements.txt
+      - run: python -m playwright install --with-deps chromium
+
+      # Step 3: run all tests and save the Allure results
+      - run: python -m pytest --alluredir=allure-results
+
+      # Step 4: build the Allure report as one HTML file (runs even if tests failed)
+      - if: always()
+        run: npx --yes allure-commandline@2.34.0 generate allure-results -o allure-report --clean --single-file
+
+      # Step 5: attach the report to this run so the team can download it
+      - if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: allure-report
+          path: allure-report/index.html
+          retention-days: 30
