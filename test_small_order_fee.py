@@ -1,6 +1,5 @@
 # Small Order Fee (RM5.00 when the cart subtotal is below RM10.00) for a guest user: REQ-1 to REQ-4,
 # the RM10.00 / RM9.99 boundary, cart changes, totals, checkout, free-delivery bar and refresh.
-import pytest
 from playwright.sync_api import Page, expect
 
 from cart_helpers import (
@@ -185,7 +184,7 @@ def test_FEE_12_bigger_pack_removes_fee(guest_page: Page):
     expect(guest_page.locator(ESTIMATED_TOTAL)).to_have_text("RM28.30")
 
 
-# Verify FEE-16: clicking the cart Checkout button opens the checkout page.
+# Verify FEE-16: a guest clicking Checkout sees the "Wait! You're leaving" popup, and "No thanks" opens the checkout page.
 def test_FEE_16_checkout_button_opens_checkout(guest_page: Page):
     # Step 1: add 1 Maalox and open the cart -> Checkout button links to /checkout/
     add_to_cart(guest_page, MAALOX_URL)
@@ -195,14 +194,17 @@ def test_FEE_16_checkout_button_opens_checkout(guest_page: Page):
     # Step 2: click Checkout
     guest_page.locator(CHECKOUT_BUTTON).click()
 
+    # Expected: the "Wait! You're leaving" popup shows with the sign-up button and the No thanks link
+    expect(guest_page.get_by_text("Wait! You're leaving")).to_be_visible(timeout=15_000)
+    expect(guest_page.get_by_text("SIGN UP / IN & CLAIM MY VOUCHERS")).to_be_visible()
+    no_thanks = guest_page.get_by_text("No thanks, continue as guest and forfeit savings")
+    expect(no_thanks).to_be_visible()
+
+    # Step 3: click No thanks
+    no_thanks.click()
+
     # Expected: the checkout page opens
-    try:
-        guest_page.wait_for_url(CHECKOUT_URL + "**", timeout=30_000)
-    except Exception:
-        pytest.fail(
-            "BUG: clicking the cart Checkout button does not open /checkout/ (page stays on the cart; "
-            "the Cloudflare speculation prefetch of /checkout/ returns 503 'prefetch refused')"
-        )
+    guest_page.wait_for_url(CHECKOUT_URL + "**", timeout=30_000)
 
 
 # Verify FEE-18 (REQ-3): checkout for exactly RM10.00 (1 x Razor + 4 x Maalox) has no fee and Grand Total RM10.00.

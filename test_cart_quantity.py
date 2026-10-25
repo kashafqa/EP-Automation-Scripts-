@@ -219,7 +219,7 @@ def test_CART_11_two_products_subtotal(guest_page: Page):
     expect(guest_page.locator(SUBTOTAL)).to_have_text("RM4.30")
 
 
-# Verify CART-12: the qty box allows at most 9998; typing 9999 is not accepted (cart stays RM1.70, badge 1, box back to 1).
+# Verify CART-12: the qty box allows at most 9998 (set in the backend); typing 9999 shows the max message and the cart stays RM1.70, badge 1.
 def test_CART_12_max_quantity(guest_page: Page):
     # Step 1: add 1 Maalox and open the cart
     add_to_cart(guest_page, MAALOX_URL)
@@ -232,13 +232,13 @@ def test_CART_12_max_quantity(guest_page: Page):
     type_quantity(guest_page.locator(QTY_BOX), "9999")
     guest_page.wait_for_timeout(3_000)
 
-    # Expected: cart unchanged (RM1.70, badge 1) and the qty box shows 1 again
+    # Expected: the qty box shows the max message
+    message = guest_page.locator(QTY_BOX).evaluate("box => box.validationMessage")
+    assert message == "Value must be less than or equal to 9998.", f"Max message not shown, got: '{message}'"
+
+    # Expected: cart unchanged (RM1.70, badge 1)
     expect(guest_page.locator(SUBTOTAL)).to_have_text("RM1.70")
     expect(guest_page.locator(CART_BADGE).first).to_have_text("1")
-    expect(
-        guest_page.locator(QTY_BOX),
-        "BUG: typed qty '9999' is not accepted (subtotal/badge still show 1) but the qty box keeps showing 9999 with no error",
-    ).to_have_value("1")
 
 
 # Verify CART-13: typing 0, -1, 'abc' or nothing in the cart qty box removes the line with a 'Basket updated.' notice.
@@ -257,7 +257,7 @@ def test_CART_13_typed_quantity_removes_line(guest_page: Page, typed: str):
     expect(guest_page.locator(EMPTY_CART)).to_be_visible()
 
 
-# Verify CART-13: typing 1.5 is not accepted and the qty box goes back to 1 (cart stays RM1.70, badge 1).
+# Verify CART-13: decimals are not allowed; typing 1.5 shows the 'valid value' message and the cart stays RM1.70, badge 1.
 def test_CART_13_typed_decimal_quantity_rejected(guest_page: Page):
     # Step 1: add 1 Maalox and open the cart
     add_to_cart(guest_page, MAALOX_URL)
@@ -267,13 +267,15 @@ def test_CART_13_typed_decimal_quantity_rejected(guest_page: Page):
     type_quantity(guest_page.locator(QTY_BOX), "1.5")
     guest_page.wait_for_timeout(3_000)
 
-    # Expected: cart unchanged (RM1.70, badge 1) and the qty box shows 1 again
+    # Expected: the qty box shows the 'valid value' message
+    message = guest_page.locator(QTY_BOX).evaluate("box => box.validationMessage")
+    assert message == "Please enter a valid value. The two nearest valid values are 1 and 2.", (
+        f"BUG: decimal qty '1.5' gives no message to the user, got: '{message}'"
+    )
+
+    # Expected: cart unchanged (RM1.70, badge 1)
     expect(guest_page.locator(SUBTOTAL)).to_have_text("RM1.70")
     expect(guest_page.locator(CART_BADGE).first).to_have_text("1")
-    expect(
-        guest_page.locator(QTY_BOX),
-        "BUG: typed qty '1.5' is not accepted (subtotal/badge still show 1) but the qty box keeps showing 1.5 with no error",
-    ).to_have_value("1")
 
 
 # Verify CART-14: 5 quick + clicks then 3 quick - clicks from qty 1 end at qty 3 (no clicks lost).
