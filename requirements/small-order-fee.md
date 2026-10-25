@@ -14,8 +14,8 @@ Source prompt: "A small order fee is added to any order whose cart subtotal, bef
 
 ## Test data
 
-- Coupon: "small order fee coupon", fixed 3.00 RM off, logged-in users only (stored as `DOC_COUPON_CODE` / `DOC_COUPON_AMOUNT` in `.env`).
-- REQ-6 check: subtotal between 10.00 and 12.99 RM + coupon makes the payable amount below 10 RM; the fee must still NOT appear.
+- Coupon: "automation_don't remove", fixed 2.00 RM off, created by Kashaf on 2026-10-25 for automation only - do not delete (stored as `DOC_COUPON_CODE` / `DOC_COUPON_AMOUNT` in `.env` and in GitHub Actions secrets). Replaces the old "small order fee coupon" (3.00 RM off).
+- REQ-6 check: subtotal between 10.00 and 11.99 RM + coupon makes the payable amount below 10 RM; the fee must still NOT appear.
 - Guest check: applying the coupon as a guest must not give the discount (see Q1–Q3).
 
 ## Open questions (for dev: Adhi / Hong)
@@ -24,8 +24,8 @@ Raised by: Kashaf (QA) · Date: 2026-10-14 · Status: awaiting answer
 
 | # | Question | Why it matters | Answer |
 |---|----------|----------------|--------|
-| Q1 | **Coupon for guests:** the coupon should work only for logged-in users, but on the cart screen a guest can apply it. Is the discount actually applied for the guest, or is it just accepted in the box? What is the intended behaviour? | If the discount applies, it breaks the "logged-in only" rule and lets anyone use the coupon without an account. | Seen live (2026-10-14): guest coupon field is ENABLED on the cart and a voucher discount is applied there, but at checkout the guest field is disabled and the voucher is silently dropped (cart RM5.00 → checkout RM13.50, no message). CONFIRMED by test `test_guest_cannot_use_logged_in_only_coupon`: "small order fee coupon" (logged-in only) IS applied for a guest on the cart: RM3.00 off, Estimated Total RM10.50 instead of RM13.50 (fee stays RM5.00). Intended behaviour still needed. **Shared with Hong 2026-10-14 (in progress).** |
-| Q2 | **Proposed guest behaviour:** guest can type the code, but Apply shows "This coupon is for members. Log in to use it" with a login link; after login the cart is kept and the coupon applies. Can we agree on this? | Clear for the user and encourages sign-up; avoids a coupon that silently disappears at checkout. | **Shared with Hong 2026-10-14 (in progress).** |
+| Q1 | **Coupon for guests:** the coupon should work only for logged-in users, but on the cart screen a guest can apply it. Is the discount actually applied for the guest, or is it just accepted in the box? What is the intended behaviour? | If the discount applies, it breaks the "logged-in only" rule and lets anyone use the coupon without an account. | Seen live (2026-10-14): guest coupon field is ENABLED on the cart and a voucher discount is applied there, but at checkout the guest field is disabled and the voucher is silently dropped (cart RM5.00 → checkout RM13.50, no message). CONFIRMED by test `test_guest_cannot_use_logged_in_only_coupon`: "small order fee coupon" (logged-in only) IS applied for a guest on the cart: RM3.00 off, Estimated Total RM10.50 instead of RM13.50 (fee stays RM5.00). **Shared with Hong 2026-10-14 (in progress).** Re-checked 2026-10-25 with the new coupon "automation_don't remove": guest still gets RM2.00 off on the cart (Estimated Total RM11.50 instead of RM13.50). **Rule confirmed by Kashaf: coupons are NOT allowed for guest users.** Kashaf to raise the fix with Hong on 2026-10-26. |
+| Q2 | **Proposed guest behaviour:** guest can type the code, but Apply gives **no discount** and shows "This coupon is for members. Log in to use it" with a login link; after login the cart is kept and the coupon applies automatically. Same message on checkout; unknown codes still say "does not exist". Can we agree on this? | Clear for the user and encourages sign-up (most users log in on the cart page); avoids a coupon that silently disappears at checkout. | **Shared with Hong 2026-10-14 (in progress).** 2026-10-25: Kashaf supports this; raising with Hong on 2026-10-26. |
 | Q3 | **Server-side check:** is the "logged-in only" coupon rule enforced again at payment/order creation, not only on the cart screen? | A cart-screen-only check can be bypassed, so a guest could still pay with the discount. | **Shared with Hong 2026-10-14 (in progress).** |
 | Q4 | **Fee amount and label:** how much is the small order fee (RM), and what exact label is shown (e.g. "Small Order Fee")? | Tests cannot assert the correct fee without it. | **CONFIRMED by Kashaf 2026-10-14: fee is RM5.00**, label "Small Order Fee" (cart and checkout). |
 | Q5 | **Sale prices:** for products with a crossed-out price (e.g. ~~RM20.19~~ RM17.16), is the subtotal calculated on the sale price or the original price? | "Before discounts" is ambiguous; it decides whether the fee applies near 10 RM. | Seen live: fee follows the SALE price (11 × Uphalyte = RM9.90 sale / RM10.45 original → fee charged). Please confirm intended. |
@@ -96,9 +96,9 @@ Rewritten 2026-10-14 in simple style (Step / Expected comments).
 | Verify FEE-21: the guest cart and its RM5.00 fee are unchanged after refreshing the cart page. | `test_small_order_fee.py` | `test_FEE_21_fee_kept_after_refresh` | PASS |
 | Verify COUPON-01: an invalid coupon shows the 'does not exist' error and the cart stays RM1.70 + RM5.00 = RM6.70. | `test_coupon.py` | `test_COUPON_01_invalid_coupon_error` | PASS |
 | Verify COUPON-02: the logged-in-only coupon gives a guest no discount (RM8.50 cart stays RM13.50 with the fee). | `test_coupon.py` | `test_COUPON_02_guest_cannot_use_logged_in_coupon` | FAIL – site bug: coupon works for guest (Q1, with Hong) |
-| Verify COUPON-03 (REQ-5): an auto-applied voucher on a RM8.50 cart lowers the total but the RM5.00 fee stays. | `test_coupon.py` | `test_COUPON_03_voucher_never_removes_fee` | PASS |
-| Verify COUPON-04 (REQ-6): an auto-applied voucher that brings a RM10.20 cart below RM10 never adds the fee. | `test_coupon.py` | `test_COUPON_04_voucher_never_adds_fee` | PASS |
-| Verify COUPON-05 (REQ-6): the real coupon on a RM10.20 cart (payable may drop to RM7.20) never adds the fee. | `test_coupon.py` | `test_COUPON_05_coupon_never_adds_fee` | PASS |
+| Verify COUPON-03 (REQ-5): an auto-applied voucher on a RM8.50 cart lowers the total but the RM5.00 fee stays. | `test_coupon.py` | `test_COUPON_03_voucher_never_removes_fee` | FAIL – no voucher shown: the new coupon is not set to display on the front end, so Auto Apply has nothing to apply (2026-10-25) |
+| Verify COUPON-04 (REQ-6): an auto-applied voucher that brings a RM10.20 cart below RM10 never adds the fee. | `test_coupon.py` | `test_COUPON_04_voucher_never_adds_fee` | FAIL – same as COUPON-03 (coupon not set to display on the front end) |
+| Verify COUPON-05 (REQ-6): the real coupon on a RM10.20 cart (payable drops to RM8.20 with the RM2 coupon) never adds the fee. | `test_coupon.py` | `test_COUPON_05_coupon_never_adds_fee` | PASS |
 | Verify COUPON-06: removing the coupon from a RM8.50 cart brings back Estimated Total RM13.50 with the RM5.00 fee. | `test_coupon.py` | `test_COUPON_06_removing_coupon_restores_totals` | PASS |
 | Verify COUPON-07: the coupon in UPPERCASE, Title Case or with extra spaces gives the same discount and total as the exact code. | `test_coupon.py` | `test_COUPON_07_coupon_case_and_spaces` | PASS |
 
@@ -111,17 +111,17 @@ Rewritten 2026-10-14 in simple style (Step / Expected comments).
 | REQ-3 | PASS | No fee at exactly RM10.00, RM10.20, RM10.70, RM28.30 |
 | REQ-4 | PASS | Fee updates on +/−, trash, popup Confirm, 2nd product, bigger pack |
 | REQ-5 | PASS | Voucher/coupon never removes the fee |
-| REQ-6 | PASS | Voucher/coupon never adds the fee (RM10.20 − RM3 → no fee) |
+| REQ-6 | PASS | Voucher/coupon never adds the fee (RM10.20 − RM2 = RM8.20 → no fee, re-run 2026-10-25) |
 | REQ-7 | NOT RUN | Logged-in side not tested yet (needs DOC_EMAIL / DOC_PASSWORD) |
 
-Coupon rule (logged-in only): **FAIL for guest** – see Q1 (with Hong).
+Coupon rule (logged-in only): **FAIL for guest** – re-confirmed 2026-10-25 with the new RM2 coupon; Kashaf raising with Hong on 2026-10-26 (see Q1).
 
 ## Missing test cases (still to write)
 
 | # | Missing | Blocked by |
 |---|---------|------------|
 | M1 | REQ-7: all fee tests as a logged-in user | Login in `.env` |
-| M2 | Logged-in user can apply "small order fee coupon" (RM3 off) and the fee still follows the subtotal | Login in `.env` |
+| M2 | Logged-in user can apply "automation_don't remove" (RM2 off) and the fee still follows the subtotal | Login in `.env` |
 | M3 | CART-16 re-login: cart kept after log out / log in (also guest cart → after login) | Login in `.env` |
 | M4 | CART-17: Rx product needs prescription/consultation before payment | Rx product name |
 | M5 | Guest coupon expected behaviour (message / login link) – update TC for guest coupon | Hong's answer (Q1–Q2) |
